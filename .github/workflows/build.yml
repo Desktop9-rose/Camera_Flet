@@ -1,11 +1,11 @@
-name: Flet Camera APK Build - Optimized
+name: Flet Camera APK Build - Fixed
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -25,39 +25,51 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
 
-    - name: 📦 安装依赖
+    - name: 📦 安装最新Flet
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install flet[build]
+        pip install flet --upgrade
+        pip install pillow
+        flet --version
 
-    - name: 🔧 配置构建环境
+    - name: 🔧 创建Flet配置文件
       run: |
-        # 清理缓存
-        rm -rf __pycache__
-        rm -rf .pytest_cache
+        cat > flet.json << EOF
+        {
+          "name": "FletCamera",
+          "description": "Flet Camera Demo App",
+          "version": "1.0.0",
+          "package": "com.example.fletcamera",
+          "icon": "assets/icon.png"
+        }
+        EOF
+        
+        # 创建默认图标（如果不存在）
+        mkdir -p assets
+        if [ ! -f assets/icon.png ]; then
+          echo "创建默认图标..."
+          # 这里可以添加创建默认图标的命令
+          touch assets/icon.png
+        fi
 
-    - name: 🏗 构建APK
+    - name: 🏗 构建APK（新版命令）
       run: |
-        flet build apk \
-          --name "FletCamera" \
-          --package "com.example.fletcamera" \
-          --version "1.0.0" \
-          --build-version "1" \
-          --verbose
+        # 方法1: 使用flet build apk（新版）
+        flet build apk
+        
+        # 如果上述命令失败，尝试方法2
+        # flet build android
 
-    - name: 📱 上传APK产物
+    - name: 📱 查找并上传APK
+      run: |
+        # 查找生成的APK文件
+        find . -name "*.apk" -type f | head -5
+        mkdir -p apk_output
+        find . -name "*.apk" -exec cp {} apk_output/ \;
+
+    - name: 📤 上传APK产物
       uses: actions/upload-artifact@v4
       with:
         name: flet-camera-apk
-        path: build/apk/*.apk
+        path: apk_output/
         retention-days: 30
-
-    - name: 🏷 发布版本
-      if: github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/apk/*.apk
-        tag_name: v1.0.0-${{ github.sha }}
-        draft: false
-        prerelease: false
