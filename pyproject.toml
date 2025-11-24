@@ -5,8 +5,9 @@ description = "Flet Camera Demo"
 readme = "README.md"
 requires-python = ">=3.10"
 
+# 关键修复：在这里也必须强制锁定版本，防止安装成最新版
 dependencies = [
-    "flet==0.24.1"
+    "flet==0.22.1"
 ]
 
 [tool.flet]
@@ -14,7 +15,6 @@ product_name = "Flet相机"
 org = "com.mycamera"
 author = "User"
 
-# 权限保持不变
 permissions = [
     "android.permission.CAMERA",
     "android.permission.WRITE_EXTERNAL_STORAGE",

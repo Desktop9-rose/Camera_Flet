@@ -5,9 +5,9 @@ import traceback
 
 
 def main(page: ft.Page):
-    # 错误捕获兜底
+    # 错误捕获兜底，防止白屏
     try:
-        page.title = "Flet 经典相机"
+        page.title = "Flet 终极相机"
         page.theme_mode = ft.ThemeMode.LIGHT
         page.padding = 20
         page.bgcolor = ft.Colors.WHITE
@@ -27,7 +27,6 @@ def main(page: ft.Page):
 
         # --- 核心逻辑 ---
 
-        # 1. 初始化相机 (在权限获取后调用)
         async def init_camera():
             try:
                 status_text.value = "正在初始化相机..."
@@ -35,7 +34,7 @@ def main(page: ft.Page):
 
                 await asyncio.sleep(0.5)
 
-                # Flet 0.22.1 中的标准相机控件
+                # Flet 0.22.1 相机控件
                 state.camera = ft.Camera(
                     expand=True,
                     fit=ft.ImageFit.COVER,
@@ -56,8 +55,9 @@ def main(page: ft.Page):
                 status_text.value = f"初始化失败: {ex}"
                 status_text.update()
 
-        # 2. 权限回调
+        # 权限回调
         def on_permission_result(e):
+            print(f"权限结果: {e.status}")
             if e.status == ft.PermissionStatus.GRANTED:
                 state.permission_granted = True
                 page.run_task(init_camera)
@@ -65,15 +65,29 @@ def main(page: ft.Page):
                 status_text.value = f"❌ 需要相机权限: {e.status}"
                 status_text.update()
 
-        # 3. 权限处理器 (Flet 0.22.1 内置支持)
-        perm_handler = ft.PermissionHandler(on_status_change=on_permission_result)
+        # --- 关键修复点 ---
+        # 1. 先创建对象（不传参，避免你本地新版 Flet 报错）
+        try:
+            perm_handler = ft.PermissionHandler()
+        except TypeError:
+            # 极低概率兜底：如果版本极旧需要传参（不太可能，但为了保险）
+            perm_handler = ft.PermissionHandler(on_status_change=on_permission_result)
+
+        # 2. 后赋值属性（所有版本都支持这种写法）
+        perm_handler.on_status_change = on_permission_result
+
+        # 3. 添加到 overlay
         page.overlay.append(perm_handler)
 
-        # 4. 按钮点击事件
+        # 按钮事件
         def start_click(e):
             status_text.value = "正在请求权限..."
             status_text.update()
-            perm_handler.request_permission(ft.PermissionType.CAMERA)
+            try:
+                perm_handler.request_permission(ft.PermissionType.CAMERA)
+            except Exception as ex:
+                status_text.value = f"请求失败: {ex}"
+                status_text.update()
 
         async def capture_click(e):
             if not state.camera:
@@ -116,7 +130,7 @@ def main(page: ft.Page):
 
         page.add(
             ft.Column([
-                ft.Text("Flet 0.22.1 经典版", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Flet 修复版相机", size=20, weight=ft.FontWeight.BOLD),
                 status_text,
                 ft.Divider(),
                 camera_box,
