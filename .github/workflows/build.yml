@@ -1,9 +1,7 @@
-name: Flet Camera APK Build - Fixed
+name: Flet Camera APK Build - Fixed Version
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -11,65 +9,54 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        python-version: ['3.10']
-
     steps:
     - name: 📥 检出代码
       uses: actions/checkout@v4
 
-    - name: 🐍 设置Python ${{ matrix.python-version }}
+    - name: 🐍 设置Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+        python-version: '3.10'
 
-    - name: 📦 安装最新Flet
+    - name: 📦 安装指定版本Flet
       run: |
         python -m pip install --upgrade pip
-        pip install flet --upgrade
+        # 安装一个已知稳定的Flet版本
+        pip install flet==0.22.0
         pip install pillow
-        flet --version
 
-    - name: 🔧 创建Flet配置文件
+    - name: 🔧 创建flet配置文件
       run: |
         cat > flet.json << EOF
         {
           "name": "FletCamera",
-          "description": "Flet Camera Demo App",
+          "description": "Camera Demo App",
           "version": "1.0.0",
-          "package": "com.example.fletcamera",
-          "icon": "assets/icon.png"
+          "package": "com.example.fletcamera"
         }
         EOF
-        
-        # 创建默认图标（如果不存在）
-        mkdir -p assets
-        if [ ! -f assets/icon.png ]; then
-          echo "创建默认图标..."
-          # 这里可以添加创建默认图标的命令
-          touch assets/icon.png
-        fi
 
-    - name: 🏗 构建APK（新版命令）
+    - name: 🛠 修复构建环境
       run: |
-        # 方法1: 使用flet build apk（新版）
-        flet build apk
-        
-        # 如果上述命令失败，尝试方法2
-        # flet build android
+        # 清理可能的缓存
+        rm -rf .flet
+        rm -rf build
 
-    - name: 📱 查找并上传APK
+    - name: 🏗 使用简化的构建命令
       run: |
-        # 查找生成的APK文件
-        find . -name "*.apk" -type f | head -5
-        mkdir -p apk_output
-        find . -name "*.apk" -exec cp {} apk_output/ \;
+        # 使用最基本的构建命令
+        python -m flet build apk --verbose
 
-    - name: 📤 上传APK产物
+    - name: 📱 查找APK文件
+      run: |
+        find . -name "*.apk" -type f | head -10
+        mkdir -p artifacts
+        find . -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+        ls -la artifacts/
+
+    - name: 📤 上传APK
       uses: actions/upload-artifact@v4
       with:
         name: flet-camera-apk
-        path: apk_output/
+        path: artifacts/
         retention-days: 30
