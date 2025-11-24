@@ -1,4 +1,4 @@
-name: Flet Camera APK Build - Final Fix
+name: Flet Camera APK Build - Final
 
 on:
   push:
@@ -22,12 +22,11 @@ jobs:
     - name: 🐦 设置 Flutter 环境
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.0' # 使用较新的稳定版
+        flutter-version: '3.24.0'
         channel: 'stable'
 
     - name: 🤝 签署 Android 协议
       run: |
-        # 这一步至关重要，解决 License 报错
         yes | flutter doctor --android-licenses
 
     - name: 🐍 设置 Python
@@ -38,19 +37,15 @@ jobs:
     - name: 📦 安装依赖
       run: |
         python -m pip install --upgrade pip
+        # 安装构建工具本身
+        pip install flet 
+        # 安装项目依赖（为了确保环境正常，虽然打包会读 toml）
         pip install -r requirements.txt
 
     - name: 🏗 构建 APK
       run: |
-        # 关键修复：
-        # 1. --project-name: 强制命名为 flet_cam，防止与 'flet' 包名冲突
-        # 2. --org: 指定包名组织，避免默认冲突
-        # 3. --product-name: 安装在手机上显示的名字
-        flet build apk --verbose \
-          --project-name flet_cam \
-          --org com.mycamera \
-          --product-name "Flet相机" \
-          --description "A simple camera app"
+        # 命令非常简单，配置全部自动读取 pyproject.toml
+        flet build apk --verbose
 
     - name: 📤 上传 APK
       uses: actions/upload-artifact@v4
