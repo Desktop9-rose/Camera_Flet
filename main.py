@@ -1,149 +1,158 @@
 import flet as ft
 from datetime import datetime
 import asyncio
-import traceback
+import os
 
+
+# 本地环境: pip install flet==0.23.2
 
 def main(page: ft.Page):
-    # 错误捕获兜底，防止白屏
-    try:
-        page.title = "Flet 终极相机"
-        page.theme_mode = ft.ThemeMode.LIGHT
-        page.padding = 20
-        page.bgcolor = ft.Colors.WHITE
-        page.window_width = 400
-        page.window_height = 800
+    # 1. 基础设置 (修复弃用警告)
+    page.title = "Flet相机 (v0.23.2)"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.padding = 20
+    page.bgcolor = ft.colors.WHITE
 
-        # --- 状态管理 ---
-        class AppState:
-            camera = None
-            permission_granted = False
+    # 新版写法: page.window.width
+    page.window.width = 400
+    page.window.height = 800
 
-        state = AppState()
+    # 2. 状态管理
+    class AppState:
+        camera = None
 
-        # --- UI 组件 ---
-        status_text = ft.Text("系统就绪，请启动相机", color=ft.Colors.BLUE_GREY_700)
-        preview_image = ft.Image(visible=False, height=200, fit=ft.ImageFit.CONTAIN)
+    state = AppState()
 
-        # --- 核心逻辑 ---
+    # 3. UI 控件
+    status_txt = ft.Text("系统就绪", color=ft.colors.BLUE_GREY_700)
+    img_preview = ft.Image(visible=False, height=300, fit=ft.ImageFit.CONTAIN)
 
-        async def init_camera():
-            try:
-                status_text.value = "正在初始化相机..."
-                status_text.update()
+    # 相机容器
+    camera_container = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.icons.CAMERA_ALT, size=50, color=ft.colors.GREY_300),
+                ft.Text("点击下方按钮启动", color=ft.colors.GREY_400)
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        height=300,
+        bgcolor=ft.colors.BLACK12,
+        border_radius=12,
+        alignment=ft.alignment.center
+    )
 
-                await asyncio.sleep(0.5)
+    # 4. 业务逻辑
+    async def init_camera_task():
+        status_txt.value = "正在连接相机..."
+        status_txt.update()
 
-                # Flet 0.22.1 相机控件
-                state.camera = ft.Camera(
-                    expand=True,
-                    fit=ft.ImageFit.COVER,
-                    visible=True
-                )
+        await asyncio.sleep(0.5)
 
-                camera_box.content = state.camera
-                camera_box.update()
-
-                btn_start.visible = False
-                btn_capture.disabled = False
-                page.update()
-
-                status_text.value = "✅ 相机运行中"
-                status_text.update()
-
-            except Exception as ex:
-                status_text.value = f"初始化失败: {ex}"
-                status_text.update()
-
-        # 权限回调
-        def on_permission_result(e):
-            print(f"权限结果: {e.status}")
-            if e.status == ft.PermissionStatus.GRANTED:
-                state.permission_granted = True
-                page.run_task(init_camera)
-            else:
-                status_text.value = f"❌ 需要相机权限: {e.status}"
-                status_text.update()
-
-        # --- 关键修复点 ---
-        # 1. 先创建对象（不传参，避免你本地新版 Flet 报错）
         try:
-            perm_handler = ft.PermissionHandler()
-        except TypeError:
-            # 极低概率兜底：如果版本极旧需要传参（不太可能，但为了保险）
-            perm_handler = ft.PermissionHandler(on_status_change=on_permission_result)
+            # Flet 0.23.2 标准相机控件
+            state.camera = ft.Camera(
+                expand=True,
+                fit=ft.ImageFit.COVER,
+                visible=True
+            )
 
-        # 2. 后赋值属性（所有版本都支持这种写法）
-        perm_handler.on_status_change = on_permission_result
+            camera_container.content = state.camera
+            camera_container.update()
 
-        # 3. 添加到 overlay
+            status_txt.value = "✅ 相机运行中"
+            status_txt.update()
+
+            btn_main.text = "立即拍照"
+            btn_main.icon = ft.icons.CAMERA
+            btn_main.bgcolor = ft.colors.GREEN
+            btn_main.on_click = take_picture_task
+            btn_main.update()
+
+        except Exception as e:
+            status_txt.value = f"相机初始化错误: {e}"
+            status_txt.update()
+
+    async def take_picture_task(e):
+        if not state.camera:
+            return
+
+        status_txt.value = "📸 拍摄中..."
+        status_txt.update()
+
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"IMG_{timestamp}.jpg"
+
+            await state.camera.take_picture_async(filename)
+            await asyncio.sleep(0.5)
+
+            img_preview.src = filename
+            img_preview.visible = True
+            img_preview.src += f"?v={timestamp}"
+
+            status_txt.value = f"✅ 已保存: {filename}"
+            page.update()
+
+        except Exception as e:
+            status_txt.value = f"拍摄失败: {e}"
+            page.update()
+
+    # 5. 权限处理
+    def on_permission(e):
+        print(f"Permission Status: {e.status}")
+        if e.status == "granted" or e.status == ft.PermissionStatus.GRANTED:
+            asyncio.create_task(init_camera_task())
+        else:
+            status_txt.value = f"❌ 权限被拒绝: {e.status}"
+            status_txt.update()
+
+    # 【关键修复】使用属性赋值法，避免 TypeError
+    # 这种写法在 0.21 - 0.24 版本中都是安全的
+    try:
+        perm_handler = ft.PermissionHandler()
+        perm_handler.on_status_change = on_permission
         page.overlay.append(perm_handler)
+    except AttributeError:
+        # 如果本地版本实在太乱导致没有 PermissionHandler，提示用户
+        status_txt.value = "错误: 您的 Flet 版本不支持权限控件，请安装 flet==0.23.2"
+        page.update()
+        return
 
-        # 按钮事件
-        def start_click(e):
-            status_text.value = "正在请求权限..."
-            status_text.update()
-            try:
-                perm_handler.request_permission(ft.PermissionType.CAMERA)
-            except Exception as ex:
-                status_text.value = f"请求失败: {ex}"
-                status_text.update()
+    def on_start_click(e):
+        status_txt.value = "请求权限中..."
+        status_txt.update()
+        # 直接调用实例的方法
+        perm_handler.request_permission(ft.PermissionType.CAMERA)
 
-        async def capture_click(e):
-            if not state.camera:
-                return
+    # 6. 界面布局
+    btn_main = ft.ElevatedButton(
+        text="启动相机",
+        icon=ft.icons.POWER_SETTINGS_NEW,
+        on_click=on_start_click,
+        bgcolor=ft.colors.BLUE,
+        color=ft.colors.WHITE,
+        height=50,
+        width=200
+    )
 
-            try:
-                status_text.value = "📸 拍照中..."
-                status_text.update()
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"IMG_{timestamp}.jpg"
-
-                await state.camera.take_picture_async(filename)
-
-                await asyncio.sleep(0.5)
-
-                preview_image.src = filename
-                preview_image.visible = True
-                preview_image.src += f"?v={timestamp}"
-
-                status_text.value = f"已保存: {filename}"
-                page.update()
-
-            except Exception as ex:
-                status_text.value = f"拍照错误: {ex}"
-                status_text.update()
-
-        # --- UI 布局 ---
-        camera_box = ft.Container(
-            content=ft.Icon(ft.Icons.CAMERA_ALT, size=50, color=ft.Colors.GREY_300),
-            height=300,
-            bgcolor=ft.Colors.BLACK12,
-            border_radius=10,
-            alignment=ft.alignment.center
-        )
-
-        btn_start = ft.ElevatedButton("启动相机", on_click=start_click, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE)
-        btn_capture = ft.ElevatedButton("拍照", on_click=capture_click, disabled=True, bgcolor=ft.Colors.GREEN,
-                                        color=ft.Colors.WHITE)
-
-        page.add(
-            ft.Column([
-                ft.Text("Flet 修复版相机", size=20, weight=ft.FontWeight.BOLD),
-                status_text,
+    page.add(
+        ft.Column(
+            [
+                ft.Text("Flet 相机 (v0.23.2)", size=20, weight="bold"),
+                status_txt,
                 ft.Divider(),
-                camera_box,
-                ft.Container(height=10),
-                ft.Row([btn_start, btn_capture], alignment=ft.MainAxisAlignment.CENTER),
+                camera_container,
+                ft.Container(height=20),
+                btn_main,
                 ft.Divider(),
-                preview_image
-            ])
+                img_preview
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            scroll=ft.ScrollMode.AUTO
         )
-
-    except Exception as e:
-        page.clean()
-        page.add(ft.Text(f"致命错误: {traceback.format_exc()}", color=ft.Colors.RED))
+    )
 
 
 if __name__ == "__main__":
