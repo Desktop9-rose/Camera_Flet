@@ -1,4 +1,4 @@
-name: Flet Camera APK Build - Classic 0.22.1
+name: Flet Camera APK Build - Final Lock
 
 on:
   push:
@@ -22,7 +22,6 @@ jobs:
     - name: 🐦 设置 Flutter 环境
       uses: subosito/flutter-action@v2
       with:
-        # 关键：Flet 0.22.1 的最佳拍档是 Flutter 3.19.6
         flutter-version: '3.19.6'
         channel: 'stable'
 
