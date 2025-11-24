@@ -1,7 +1,7 @@
 import flet as ft
 from datetime import datetime
 import asyncio
-import traceback  # 用于显示详细报错
+import traceback
 
 
 def main(page: ft.Page):
@@ -28,6 +28,7 @@ def main(page: ft.Page):
 
         # 权限回调处理
         def on_permission_result(e):
+            print(f"权限回调: {e.status}")  # 调试打印
             if e.status == ft.PermissionStatus.GRANTED:
                 status_text.value = "✅ 权限已获取，正在启动相机..."
                 status_text.update()
@@ -37,8 +38,12 @@ def main(page: ft.Page):
                 status_text.value = f"❌ 权限被拒绝: {e.status}"
                 status_text.update()
 
-        # 创建权限处理器
-        perm_handler = ft.PermissionHandler(on_status_change=on_permission_result)
+        # --- 核心修复：更安全的初始化权限控件 ---
+        # 不在括号里传参，而是单独赋值，避免 TypeError
+        perm_handler = ft.PermissionHandler()
+        perm_handler.on_status_change = on_permission_result
+
+        # 必须添加到 overlay
         page.overlay.append(perm_handler)
 
         # 异步启动相机任务
@@ -66,7 +71,11 @@ def main(page: ft.Page):
         def request_perms(e):
             status_text.value = "正在请求系统权限..."
             status_text.update()
-            perm_handler.request_permission(ft.PermissionType.CAMERA)
+            try:
+                perm_handler.request_permission(ft.PermissionType.CAMERA)
+            except Exception as ex:
+                status_text.value = f"请求权限失败: {ex}"
+                status_text.update()
 
         async def capture_photo(e):
             if not state.camera:
@@ -118,7 +127,7 @@ def main(page: ft.Page):
                                         color=ft.Colors.WHITE)
 
         page.add(
-            ft.Text("Flet 相机诊断版", size=20, weight=ft.FontWeight.BOLD),
+            ft.Text("Flet 相机修复版", size=20, weight=ft.FontWeight.BOLD),
             status_text,
             ft.Divider(),
             camera_container,
@@ -130,7 +139,6 @@ def main(page: ft.Page):
 
     except Exception as e:
         # --- 致命错误捕获 ---
-        # 如果上面任何代码导致崩溃，这里会显示错误堆栈，而不是白屏
         page.clean()
         page.add(
             ft.Text("⚠️ 程序发生致命错误", color=ft.Colors.RED, size=24),
