@@ -1,24 +1,29 @@
 [project]
 name = "flet_cam"
 version = "1.0.0"
-description = "Flet Camera Demo App"
+description = "Flet Camera Demo"
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "flet>=0.24.0",
+    "flet==0.25.0",
     "Pillow>=10.0.0"
 ]
 
 [tool.flet]
 product_name = "Flet相机"
 org = "com.mycamera"
-author = "Your Name"
+author = "DemoUser"
 
-# 核心修复：显式声明 Android 权限
-# 只有加了这行，安装到手机后，图1的权限列表里才会出现“相机”选项
+# 关键修改：将权限部分提到这里，并确保格式正确
 permissions = [
     "android.permission.CAMERA",
     "android.permission.WRITE_EXTERNAL_STORAGE",
     "android.permission.READ_EXTERNAL_STORAGE"
+]
+
+# 额外配置：指定资源包含，防止资源丢失导致的白屏
+include = [
+    "main.py",
+    "assets"
 ]
