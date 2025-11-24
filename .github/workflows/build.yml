@@ -1,4 +1,4 @@
-name: Flet Camera APK Build - Fixed Version
+name: Flet Camera APK Build - Fixed
 
 on:
   push:
@@ -13,50 +13,36 @@ jobs:
     - name: 📥 检出代码
       uses: actions/checkout@v4
 
-    - name: 🐍 设置Python
+    - name: ☕ 设置 Java 环境 (Flutter 需要)
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🐦 设置 Flutter 环境
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.22.0' # 使用与 Flet 兼容的稳定版 Flutter
+        channel: 'stable'
+
+    - name: 🐍 设置 Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    - name: 📦 安装指定版本Flet
+    - name: 📦 安装依赖
       run: |
         python -m pip install --upgrade pip
-        # 安装一个已知稳定的Flet版本
-        pip install flet==0.22.0
-        pip install pillow
+        pip install -r requirements.txt
 
-    - name: 🔧 创建flet配置文件
+    - name: 🏗 构建 APK
       run: |
-        cat > flet.json << EOF
-        {
-          "name": "FletCamera",
-          "description": "Camera Demo App",
-          "version": "1.0.0",
-          "package": "com.example.fletcamera"
-        }
-        EOF
+        # 直接使用 flet 命令，而不是 python -m flet
+        flet build apk --verbose
 
-    - name: 🛠 修复构建环境
-      run: |
-        # 清理可能的缓存
-        rm -rf .flet
-        rm -rf build
-
-    - name: 🏗 使用简化的构建命令
-      run: |
-        # 使用最基本的构建命令
-        python -m flet build apk --verbose
-
-    - name: 📱 查找APK文件
-      run: |
-        find . -name "*.apk" -type f | head -10
-        mkdir -p artifacts
-        find . -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-        ls -la artifacts/
-
-    - name: 📤 上传APK
+    - name: 📤 上传 APK
       uses: actions/upload-artifact@v4
       with:
         name: flet-camera-apk
-        path: artifacts/
+        path: build/apk/app-release.apk
         retention-days: 30
