@@ -2,7 +2,7 @@ import flet as ft
 from datetime import datetime
 import os
 import logging
-from pathlib import Path
+import asyncio
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -10,217 +10,165 @@ logger = logging.getLogger(__name__)
 
 
 def main(page: ft.Page):
-    # 页面配置
     page.title = "Flet相机"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
     page.window_width = 400
     page.window_height = 700
 
-    # 状态管理类
-    class CameraState:
-        def __init__(self):
-            self.camera = None
-            self.rotation = 0
-            self.is_camera_ready = False
-            self.last_captured_path = None
+    # 状态持有
+    class AppState:
+        camera = None
+        is_ready = False
 
-        def update_status(self, message):
-            status_text.value = message
-            page.update()
+    state = AppState()
 
-    state = CameraState()
+    # UI 状态更新辅助
+    def update_status(msg):
+        status_text.value = msg
+        status_text.update()
 
-    # 工具函数
-    def get_storage_path():
-        """
-        获取存储路径
-        注意：Android 10+ 有分区存储限制，直接写 DCIM 可能需要特殊权限或 MediaStore API。
-        为了兼容性，这里优先使用 App 外部私有目录，该目录无需额外权限即可读写。
-        """
-        if page.platform == ft.Platform.ANDROID:
-            # 尝试获取 Android 环境变量中的外部文件目录
-            # 类似于: /storage/emulated/0/Android/data/com.example.fletcamera/files
-            # 这是一个安全的写入位置
-            try:
-                # Flet 在 Android 上运行时，通常可以通过 os 模块访问这些路径
-                # 但最安全的方式是使用相对路径，Flet 会将其解析到应用私有目录
-                base_path = ""
-            except:
-                base_path = "photos"
-        else:
-            base_path = "photos"
+    # --- 核心逻辑 ---
 
-        # 确保目录存在（如果是绝对路径）
-        if base_path and not os.path.exists(base_path):
-            try:
-                Path(base_path).mkdir(parents=True, exist_ok=True)
-            except:
-                pass
-
-        return base_path
-
-    def create_camera_component():
-        """创建相机组件"""
-        try:
-            return ft.Camera(
-                expand=True,  # 让相机填满容器
-                fit=ft.ImageFit.COVER,
-                visible=True,
-            )
-        except Exception as e:
-            logger.error(f"创建相机组件失败: {e}")
-            return None
-
-    # 事件处理函数
-    async def check_permissions(e):
-        """检查并请求权限"""
-        try:
-            # 请求权限
-            permissions = await page.request_permissions_async(
-                [ft.PermissionType.CAMERA]
-            )
-
-            # 在 Flet 0.24+ 中，权限处理逻辑可能略有不同，这里简化处理
-            # 实际上初始化相机时，系统通常也会自动弹窗
-            await init_camera()
-
-        except Exception as e:
-            logger.error(f"权限请求失败: {e}")
-            state.update_status(f"权限错误: {str(e)}")
+    def create_camera():
+        """创建相机控件"""
+        return ft.Camera(
+            expand=True,
+            fit=ft.ImageFit.COVER,
+            visible=True
+        )
 
     async def init_camera():
-        """初始化相机"""
-        state.update_status("🔄 初始化相机中...")
-
+        """权限获取成功后，执行此函数初始化相机"""
         try:
-            camera = create_camera_component()
-            if not camera:
-                state.update_status("❌ 相机初始化失败")
-                return
+            update_status("权限已获取，正在启动相机...")
 
-            state.camera = camera
-            camera_container.content = camera
+            cam = create_camera()
+            camera_container.content = cam
+            camera_container.update()
+            state.camera = cam
+            state.is_ready = True
 
+            # 更新按钮状态
             btn_start.disabled = True
             btn_capture.disabled = False
-            btn_rotate.disabled = False
-            state.is_camera_ready = True
+            btn_start.update()
+            btn_capture.update()
 
-            state.update_status("✅ 相机就绪")
-            page.update()
+            update_status("✅ 相机已就绪，请拍照")
 
         except Exception as e:
-            logger.error(f"相机初始化异常: {e}")
-            state.update_status(f"❌ 初始化异常: {str(e)}")
+            update_status(f"❌ 启动失败: {e}")
 
-    async def rotate_camera(e):
-        """旋转相机预览"""
-        if not state.camera:
-            return
+    # --- 权限处理逻辑 (修复报错的核心部分) ---
 
-        # 注意：Flet Camera 目前并未完全支持所有设备的 rotate 属性实时热更新
-        # 但我们可以尝试切换摄像头 ID (0: 后置, 1: 前置)
-        state.rotation = (state.rotation + 1) % 2
-        try:
-            state.camera.camera_id = state.rotation
-            state.update_status(f"🔄 切换摄像头: {'前置' if state.rotation else '后置'}")
-            page.update()
-        except Exception as e:
-            state.update_status("⚠️ 切换失败")
+    def on_permission_result(e):
+        """权限请求的回调结果"""
+        logger.info(f"Permission result: {e.permission} - {e.status}")
+
+        # Flet 的 PermissionStatus 枚举：GRANTED, DENIED, etc.
+        if e.status == ft.PermissionStatus.GRANTED:
+            # 权限被允许，开始初始化
+            page.run_task(init_camera)
+        else:
+            update_status("❌ 必须授予相机权限才能使用！")
+
+    # 创建权限处理器控件
+    permission_handler = ft.PermissionHandler(on_status_change=on_permission_result)
+    # 重要：必须添加到页面 overlay 中才能工作
+    page.overlay.append(permission_handler)
+
+    async def request_camera_permission(e):
+        """点击启动按钮触发"""
+        update_status("正在请求权限...")
+        # 发起请求，结果会回调 on_permission_result
+        permission_handler.request_permission(ft.PermissionType.CAMERA)
 
     async def capture_photo(e):
-        """拍摄照片"""
-        if not state.is_camera_ready or not state.camera:
-            state.update_status("❌ 相机未就绪")
+        """拍照逻辑"""
+        if not state.is_ready or not state.camera:
             return
 
         try:
-            state.update_status("📸 拍摄中...")
-            page.update() // 强制刷新UI
+            update_status("📸 拍摄中...")
 
+            # 生成带时间戳的文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"IMG_{timestamp}.jpg"
-
-            # 使用相对路径，Flet 会自动处理
-            # 在 Android 上，这通常位于 /data/user/0/包名/app_flutter/ 或类似的内部私有目录
+            # Android 推荐使用相对路径，Flet 会自动处理到应用私有目录
             save_path = filename
 
-            # 异步拍摄
             await state.camera.take_picture_async(save_path)
 
-            # 稍微等待一下文件写入
-            import asyncio
+            # 延迟一小会儿确保文件写入
             await asyncio.sleep(0.5)
 
-            state.last_captured_path = save_path
-
             # 更新预览
-            preview_img = ft.Image(
-                src=save_path,  # Flet 可以直接读取相对路径的图片
-                width=page.width * 0.9,
-                height=200,
-                fit=ft.ImageFit.CONTAIN,
-                border_radius=ft.border_radius.all(12)
-            )
+            preview_img.src = save_path
+            # 添加一个随机参数强制刷新图片缓存
+            preview_img.src += f"?v={timestamp}"
+            preview_text.value = f"已保存: {filename}"
 
-            preview_container.content = ft.Column([
-                ft.Text(f"已保存: {filename}", size=14),
-                preview_img
-            ])
-
-            state.update_status("✅ 拍摄成功")
-            page.update()
+            preview_container.update()
+            update_status("✅ 拍摄成功")
 
         except Exception as e:
-            logger.error(f"拍摄失败: {e}")
-            state.update_status(f"❌ 错误: {str(e)}")
+            logger.error(f"Error: {e}")
+            update_status(f"❌ 拍摄出错: {e}")
 
-    # UI组件
-    status_text = ft.Text("请点击启动相机", size=16, color=ft.Colors.BLUE_GREY_700)
+    # --- UI 构建 ---
 
-    btn_start = ft.ElevatedButton(
-        "启动相机", on_click=check_permissions, icon=ft.Icons.CAMERA_ENHANCE,
-        style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
-    )
-
-    btn_capture = ft.ElevatedButton(
-        "拍照", on_click=capture_photo, icon=ft.Icons.CAMERA_ALT, disabled=True,
-        style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE)
-    )
-
-    btn_rotate = ft.IconButton(icon=ft.Icons.SWITCH_CAMERA, on_click=rotate_camera, disabled=True)
+    status_text = ft.Text("点击下方按钮启动相机", color=ft.Colors.GREY_700)
 
     camera_container = ft.Container(
         content=ft.Column([
-            ft.Icon(ft.Icons.CAMERA_ALT, size=48, color=ft.Colors.GREY_400),
-            ft.Text("预览区域", color=ft.Colors.GREY_600)
+            ft.Icon(ft.Icons.CAMERA_ALT, size=50, color=ft.Colors.GREY_300),
+            ft.Text("相机预览区域", color=ft.Colors.GREY_400)
         ], alignment=ft.MainAxisAlignment.CENTER),
-        width=page.width,
-        height=page.height * 0.5,
-        border=ft.border.all(1, ft.Colors.GREY_300),
-        border_radius=10,
-        bgcolor=ft.Colors.BLACK12,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE  # 确保画面不溢出
+        expand=True,
+        bgcolor=ft.Colors.BLACK87,
+        alignment=ft.alignment.center
     )
 
-    preview_container = ft.Container(
-        content=ft.Text("暂无照片"),
-        padding=10,
-        alignment=ft.alignment.center,
-        border=ft.border.all(1, ft.Colors.GREY_200),
-        border_radius=10
+    preview_img = ft.Image(
+        src="",
+        visible=True,
+        height=150,
+        fit=ft.ImageFit.CONTAIN
+    )
+    preview_text = ft.Text("暂无照片")
+
+    preview_container = ft.Column([
+        preview_text,
+        preview_img
+    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+    btn_start = ft.ElevatedButton(
+        "🚀 启动相机",
+        on_click=request_camera_permission,  # 绑定到修复后的函数
+        bgcolor=ft.Colors.BLUE,
+        color=ft.Colors.WHITE
     )
 
+    btn_capture = ft.ElevatedButton(
+        "📸 拍照",
+        on_click=capture_photo,
+        disabled=True,
+        bgcolor=ft.Colors.GREEN,
+        color=ft.Colors.WHITE
+    )
+
+    # 页面布局
     page.add(
-        ft.AppBar(title=ft.Text("Flet相机"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
         ft.Column([
-            ft.Container(content=status_text, alignment=ft.alignment.center, padding=10),
-            camera_container,
-            ft.Row([btn_start, btn_capture, btn_rotate], alignment=ft.MainAxisAlignment.CENTER, spacing=20),
-            ft.Divider(),
-            preview_container
-        ], scroll=ft.ScrollMode.AUTO, expand=True)
+            ft.Container(status_text, padding=10, alignment=ft.alignment.center),
+            ft.Container(camera_container, expand=True, border_radius=10, margin=10),
+            ft.Container(
+                content=ft.Row([btn_start, btn_capture], alignment=ft.MainAxisAlignment.CENTER, spacing=20),
+                padding=10
+            ),
+            ft.Container(preview_container, height=200, bgcolor=ft.Colors.GREY_100, border_radius=10, padding=10)
+        ], expand=True)
     )
 
 

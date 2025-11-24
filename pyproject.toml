@@ -5,7 +5,6 @@ description = "Flet Camera Demo App"
 readme = "README.md"
 requires-python = ">=3.10"
 
-# 这里定义打包到 APK 里的依赖
 dependencies = [
     "flet>=0.24.0",
     "Pillow>=10.0.0"
@@ -14,4 +13,12 @@ dependencies = [
 [tool.flet]
 product_name = "Flet相机"
 org = "com.mycamera"
-author = "Lisa"
+author = "Your Name"
+
+# 核心修复：显式声明 Android 权限
+# 只有加了这行，安装到手机后，图1的权限列表里才会出现“相机”选项
+permissions = [
+    "android.permission.CAMERA",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.READ_EXTERNAL_STORAGE"
+]
