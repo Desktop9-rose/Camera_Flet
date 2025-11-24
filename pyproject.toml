@@ -1,0 +1,17 @@
+[project]
+name = "flet_cam"
+version = "1.0.0"
+description = "Flet Camera Demo App"
+readme = "README.md"
+requires-python = ">=3.10"
+
+# 这里定义打包到 APK 里的依赖
+dependencies = [
+    "flet>=0.24.0",
+    "Pillow>=10.0.0"
+]
+
+[tool.flet]
+product_name = "Flet相机"
+org = "com.mycamera"
+author = "Lisa"
