@@ -1,4 +1,4 @@
-name: Flet Camera APK Build - v0.24.1 Fixed
+name: Flet Camera APK Build - Final Clean
 
 on:
   push:
@@ -22,8 +22,7 @@ jobs:
     - name: 🐦 设置 Flutter 环境
       uses: subosito/flutter-action@v2
       with:
-        # 关键修改：降级 Flutter 以匹配 Flet 0.24.1 的底层引擎
-        flutter-version: '3.22.0'
+        flutter-version: '3.22.0' # 严格匹配 Flet 0.24.1
         channel: 'stable'
 
     - name: 🤝 签署 Android 协议
@@ -38,12 +37,12 @@ jobs:
     - name: 📦 安装依赖
       run: |
         python -m pip install --upgrade pip
-        # 这一步会读取 requirements.txt 安装 flet==0.24.1
+        # 安装 requirements.txt (现在只有 flet==0.24.1)
         pip install -r requirements.txt
 
     - name: 🏗 构建 APK
       run: |
-        # 使用 verbose 模式构建，确保读取 pyproject.toml
+        # 构建命令
         flet build apk --verbose
 
     - name: 📤 上传 APK
