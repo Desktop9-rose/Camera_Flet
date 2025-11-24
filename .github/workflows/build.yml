@@ -1,0 +1,63 @@
+name: Flet Camera APK Build - Optimized
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.10']
+
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+
+    - name: 🐍 设置Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flet[build]
+
+    - name: 🔧 配置构建环境
+      run: |
+        # 清理缓存
+        rm -rf __pycache__
+        rm -rf .pytest_cache
+
+    - name: 🏗 构建APK
+      run: |
+        flet build apk \
+          --name "FletCamera" \
+          --package "com.example.fletcamera" \
+          --version "1.0.0" \
+          --build-version "1" \
+          --verbose
+
+    - name: 📱 上传APK产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: flet-camera-apk
+        path: build/apk/*.apk
+        retention-days: 30
+
+    - name: 🏷 发布版本
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/apk/*.apk
+        tag_name: v1.0.0-${{ github.sha }}
+        draft: false
+        prerelease: false
