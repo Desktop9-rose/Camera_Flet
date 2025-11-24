@@ -6,8 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "flet",
-    "Pillow"
+    "flet==0.24.1"
 ]
 
 [tool.flet]
@@ -15,7 +14,7 @@ product_name = "Flet相机"
 org = "com.mycamera"
 author = "User"
 
-# 这里的声明决定了图2里会不会出现“相机”权限
+# 权限保持不变
 permissions = [
     "android.permission.CAMERA",
     "android.permission.WRITE_EXTERNAL_STORAGE",
